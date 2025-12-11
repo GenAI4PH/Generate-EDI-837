@@ -1,0 +1,354 @@
+Let’s pick 15 scenarios that are both realistic for FEP/FEPDirect-style testing and friendly for your Python + synthetic generator design.
+
+I’ll split them into:
+
+P* = Positive scenarios (should pass / “clean” or controlled)
+
+N* = Negative / edge scenarios (should fail or trigger edits)
+
+For each, I’ll note: Purpose, Key data/structure, and what your generator should control.
+
+Group 1 – Core positive 837P scenarios (should pass)
+P001 – Clean in-network office visit, single line (Subscriber = Patient)
+
+Purpose
+Baseline “happy path” claim – simplest pattern to validate your generator and end-to-end flow.
+
+Key characteristics
+
+Professional office visit (e.g., CPT 99213)
+
+Subscriber = patient (no PAT segment)
+
+One line item in 2400 loop (SV1)
+
+In-network provider, standard POS (e.g., 11)
+
+1 primary DX code (HI segment; DX1 only)
+
+Reasonable charge amount (e.g., 100–200 USD)
+
+Generator controls
+
+Use your subscriber/member + provider files to pick a matching in-network provider.
+
+Populate CLM, HI, SV1, DTP segments with clean, valid data.
+
+Perfect alignment of:
+
+CLM02 = line charge amount
+
+DOS within coverage and after DOB.
+
+P002 – Multi-line office visit with common modifiers
+
+Purpose
+Test multiple line items and modifiers logic (common for FEP / commercial payers).
+
+Key characteristics
+
+Same member, same DOS.
+
+3–4 SV1 lines (e.g., exam, lab, injection).
+
+Use common modifiers (25, 59, etc.) on appropriate lines.
+
+Multiple DX codes with DX pointers in SV1.
+
+CLM still balanced with sum of lines.
+
+Generator controls
+
+Generate 1 CLM with 3–4 related CPT codes.
+
+Fill SV1-07 (modifier) and DX pointers according to your 44-field template (Diag Code point 1–4).
+
+Ensure ∑(SV1-line-charges) = CLM02.
+
+P003 – Multi-claim file for same member across different DOS
+
+Purpose
+Test member-centric behavior and longitudinal data; multiple claims for one member in a single file.
+
+Key characteristics
+
+Same member/subscriber appears in 3–5 separate claims (ST–SE transaction).
+
+DOS spread across weeks/months.
+
+Different providers or same provider; mix allowed.
+
+Generator controls
+
+Maintain consistent member PHI: same DOB, address, ID, gender.
+
+Vary provider and/or CPT codes per claim.
+
+All claims structurally clean and valid.
+
+P004 – Child dependent claim with PAT segment
+
+Purpose
+Test dependent logic: subscriber ≠ patient, PAT segment, and coordination with SBR.
+
+Key characteristics
+
+Subscriber is parent; patient is child.
+
+Include PAT segment with relationship (e.g., 19 – Child).
+
+SBR reflects subscriber; PAT and 2010CA reflect patient.
+
+DX/CPT typical for pediatric visit.
+
+Generator controls
+
+Pick a subscriber + dependent pair from your supporting files (or synthetically generate relationship).
+
+Populate PAT and 2010CA loops correctly.
+
+Ensure DOB logic: child DOB < subscriber DOB by at least e.g., 15–40 years.
+
+P005 – Accident-related claim (auto or work-related)
+
+Purpose
+Use your optional accident-related fields; test external cause codes and accident segments.
+
+Key characteristics
+
+CLM is accident-related (e.g., auto accident).
+
+CLM11 or appropriate segment indicates accident type.
+
+DTP with accident date.
+
+HI: external cause DX codes (e.g., injury/accident codes).
+
+POS consistent (e.g., ER or urgent care).
+
+Generator controls
+
+Turn ON the accident fields from your template for this scenario.
+
+Enforce Accident Date <= DOS.
+
+Populate accident-related diagnosis codes and possibly claim notes (NTE).
+
+P006 – Preventive / wellness visit with $0 member responsibility
+
+Purpose
+Test claims where member has no copay/coinsurance (fully covered preventive).
+
+Key characteristics
+
+Preventive CPT (e.g., 99381–99387).
+
+Primary DX indicates routine exam/preventive.
+
+Allowed amount = paid amount; CAS segments show zero member liability (or omitted).
+
+CLM claim frequency = original claim.
+
+Generator controls
+
+Support scenario where pricing logic will result in no member responsibility.
+
+If you simulate CAS/AMT segments, ensure they reflect zero patient cost share.
+
+P007 – Out-of-network provider with higher member responsibility
+
+Purpose
+Test OON logic and higher cost-share patterns.
+
+Key characteristics
+
+Provider marked as out-of-network in supporting data or scenario flag.
+
+SBR / subscriber info same as typical.
+
+Higher allowed amount or CAS adjustments resulting in larger member responsibility.
+
+Could use standard office visit codes but with different pricing.
+
+Generator controls
+
+Use provider with OON flag or special taxonomy.
+
+Bias charges higher; if you simulate adjustments, ensure CAS indicates higher patient liability.
+
+P008 – COB / Secondary payer claim (with prior primary payment)
+
+Purpose
+Test coordination of benefits logic – 837P secondary submission.
+
+Key characteristics
+
+SBR indicates secondary coverage (SBR01 not “P”).
+
+OI, AMT, CAS, possibly SVD segments present to convey primary payment.
+
+Claim uses same CPT/DX combination but with reduced liability.
+
+Generator controls
+
+Generate realistic primary paid amounts and adjustments.
+
+Ensure correct placement of CAS/AMT/SVD segments in 2320/2430 loops.
+
+Maintain consistent member coverage info (subscriber ID, etc.).
+
+Group 2 – Negative / edge scenarios (should fail or trigger edits)
+N001 – Missing/invalid billing provider NPI
+
+Purpose
+Test required provider identity edits.
+
+Key characteristics
+
+NM1*85 (Billing Provider) present but:
+
+Either NPI element missing/blank, or
+
+NPI is invalid format (wrong length or all zeros).
+
+Generator controls
+
+Intentionally break NPI while keeping rest of claim valid.
+
+Other provider fields (name, address) correct so that only NPI is the error.
+
+N002 – Invalid diagnosis code for date of service
+
+Purpose
+Test DX validity checks (e.g., ICD code not valid or retired for DOS).
+
+Key characteristics
+
+HI segment uses a diagnosis code that:
+
+Is not found in your DX reference table, or
+
+Marked as inactive for that DOS range (if you maintain effective dates).
+
+Generator controls
+
+Maintain a list of intentionally invalid or deprecated DX codes.
+
+All other segments (CLM, SV1, DTP) remain clean.
+
+N003 – Invalid procedure / place-of-service combination
+
+Purpose
+Test business rule that certain CPT codes cannot be billed with certain POS.
+
+Key characteristics
+
+SV1 line uses CPT that your rules say is incompatible with the chosen POS (e.g., an inpatient-only code with office POS 11).
+
+Claim otherwise structurally valid.
+
+Generator controls
+
+Add scenario rule: override normal POS mapping and force an invalid pair.
+
+Use your procedure code reference to know valid POS and then invert it.
+
+N004 – DOS outside member coverage period or before DOB
+
+Purpose
+Test eligibility period checks.
+
+Key characteristics
+
+For scenario variant A: DOS after coverage end date.
+
+For scenario variant B: DOS before coverage start date or even before member DOB (extreme).
+
+SBR/POL segments (if used) could explicitly show coverage period for clarity.
+
+Generator controls
+
+Use member table fields (coverage start/end) if available; else synthetically assign them.
+
+Intentionally pick DOS that violates these ranges.
+
+N005 – Duplicate claim submission
+
+Purpose
+Test duplicate detection (same CLM twice).
+
+Key characteristics
+
+Two claims in same file or across multiple runs with:
+
+Same member, provider, DOS, CPT(s), charge amount, and claim control number.
+
+Both structurally valid individually.
+
+Generator controls
+
+Generate claim A.
+
+Generate claim B with identical CLM + SV1 levels (maybe only envelope IDs differ).
+
+Optionally use different ISA13 or GS06 but same CLM01 (claim ID) to mimic true duplicate.
+
+N006 – Line-sum vs claim amount mismatch
+
+Purpose
+Test financial consistency edit: sum of line-item charges ≠ CLM02.
+
+Key characteristics
+
+2–3 SV1 lines with charges that intentionally do not add up to CLM02.
+
+Everything else is correct.
+
+Generator controls
+
+Introduce a small delta (e.g., CLM02 = 150 but lines 100 + 60 = 160).
+
+Ensure your generator can override the automatic balancing logic only for this scenario.
+
+N007 – Structural violation: missing key HI or DTP segment
+
+Purpose
+Test “required segment missing” edits (structure level, not just value-level).
+
+Key characteristics
+
+Completely omit one required segment per implementation guide or trading partner rules:
+
+Example A: Missing HI (diagnosis) at 2300 level.
+
+Example B: Missing DTP*472 (Service Date) at 2300 or 2400 as required.
+
+Generator controls
+
+Allow scenario flag to suppress emission of specific segments despite core templates.
+
+Everything else is valid so that validator highlights only the structural omission.
+
+How to use these in your Python/ config design
+
+For each scenario above, in your scenario configuration layer you’d eventually define:
+
+Scenario ID & name: P001_Clean_Office_Single_Line, N006_Amount_Imbalance, etc.
+
+Expected outcome: should_pass: true/false (for test assertions).
+
+Structural rules:
+
+min_lines, max_lines, required/forbidden segments, whether PAT, COB loops used, etc.
+
+Data rules:
+
+Constraints on DOS, DX validity, POS, NPI, in-network flag, accident fields, etc.
+
+Field-level overrides:
+
+e.g., force_invalid_npi = true, force_unbalanced_amounts = true.
+
+Your existing 44-field 837P input template can map naturally into these scenarios:
+
+Scenarios toggle which fields must be populated (e.g., accident fields, PAT, multi-DX) and how they’re interpreted.
