@@ -1,3 +1,13 @@
+I need to create AI model to generate X12 EDI 837 professional 5010 data file synthetically. 
+
+Analyze following requirement and suggest best approach to build this project in Python and Github. 
+
+Don't generate code yet. 
+
+Refine my requirement as required to create best approach. 
+
+-------------
+
 This is project about creating model to generate X12 837P professional Claims file. The purpose of the model is to generate EDI 837 professional file with Synthetic data for Test Data automation. Need to generate files for different test case scenarios.
 
 Generate standard EDI 837 professional file. Generate file by building each segment first and combined all segment at the end according to EDI837 standard. 
